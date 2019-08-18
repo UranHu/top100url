@@ -18,9 +18,11 @@ namespace turl{
         int fd_;
         int64_t file_size_;
         int64_t pos_;
+        int64_t map_len;
         std::shared_ptr<std::mutex> mu_;
         std::shared_ptr<std::condition_variable> cv_;
-        std::vector<URLCounter>& counters_;
+        std::vector< std::shared_ptr<URLCounter> > counters_;
+        std::shared_ptr<url_map> map_;
     };
 } //namespace turl
 #endif
