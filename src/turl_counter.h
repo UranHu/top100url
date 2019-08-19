@@ -8,14 +8,15 @@
 namespace turl {
     class URLCounter {
         public:
-            URLCounter(std::shared_ptr<url_map> map, const int id);
+            URLCounter(std::shared_ptr<url_map> map, char* buf, const int64_t start, const int64_t end, const int id, std::shared_ptr<std::condition_variable> cv);
            ~URLCounter();
-            void count(const char* buf, const int64_t len, const int64_t start, const int64_t end);
-            bool finish() { return done_;}
+            void count();
         private:
             std::shared_ptr<url_map> map_;
-            bool done_;
-            const int id_;
+            char* buf_;
+            int64_t start_;
+            int64_t end_;
+            int id_;
             std::shared_ptr<std::condition_variable> cv_;
     };
 } //namespace turl

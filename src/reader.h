@@ -13,6 +13,8 @@ namespace turl{
         Reader(const std::string fp, std::shared_ptr<std::condition_variable> condition_var);
         ~Reader();
         void read_file(void** buf);
+        bool finish() { return pos_ > file_size_; }
+        bool start() { return pos_ == 0; }
     private:
         std::string file_path_;
         int fd_;
