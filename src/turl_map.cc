@@ -16,7 +16,7 @@ url_map::~url_map() {
 
 void url_map::stat(std::unordered_map<std::shared_ptr<URL>, uint32_t> &candidates) {
     // pick top_k url in single block
-    
+        
     // add top_k url to candidates table
 
     // clear old records
