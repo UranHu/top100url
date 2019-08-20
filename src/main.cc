@@ -10,6 +10,7 @@
 namespace turl{
 
 std::atomic<int> counted;
+<<<<<<< HEAD
 std::atomic<int> sorted;
 std::condition_variable cv;
 std::mutex mu;

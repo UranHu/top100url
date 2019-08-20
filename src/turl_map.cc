@@ -116,8 +116,6 @@ void url_map::stat(std::unordered_map<std::string, uint32_t> &candidates) {
         std::lock_guard<std::mutex> l(mu[i]);
         std::swap(tmp_map, maps[i]);
         times[i].swap(tmp_v);
-        }
-    }
 }
 
 void url_map::insert_url(const int idx, const std::string url) {
