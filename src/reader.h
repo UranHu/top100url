@@ -5,7 +5,8 @@
 #include <mutex>
 #include <vector>
 #include "turl_define.h"
-#include "turl_counter.h"
+#include "turl_map.h"
+#include <stdint.h>
 
 namespace turl{
     class Reader {
@@ -23,7 +24,6 @@ namespace turl{
         int64_t map_len;
         std::shared_ptr<std::mutex> mu_;
         std::shared_ptr<std::condition_variable> cv_;
-        std::vector< std::shared_ptr<URLCounter> > counters_;
         std::shared_ptr<url_map> map_;
     };
 } //namespace turl
