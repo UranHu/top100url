@@ -1,8 +1,8 @@
-#include "turl_map.h"
 #include <algorithm>
+#include "turl_map.h"
 
 namespace turl {
-bool url_cmp(std::shared_ptr<URL> &a, std::shared_ptr<URL> &b) {
+bool url_cmp(std::shared_ptr<URL> a, std::shared_ptr<URL> b) {
     return a->t_ < b->t_;
 }
 
@@ -11,8 +11,6 @@ url_heap::url_heap(std::vector< std::vector< std::shared_ptr<URL> > > &times):
             poped(0),
             topk_t_(0),
             heap_size_(0) {
-    heap_.resize(FLAGS_hash_shardings);
-    cursors_.resize(FLAGS_hash_shardings);
 }
 
 url_heap::~url_heap() { }
@@ -78,7 +76,7 @@ int url_heap::pop(std::string &s) {
         (*it) = node;
         cursors_[vid]++;
     } else {
-        swap(0, heap_size_);
+        swap(0, heap_size_-1);
         heap_size_--;
     }
     heapify(0);
@@ -94,50 +92,66 @@ void url_heap::swap(int i, int j) {
 url_map::url_map() {
     maps.resize(FLAGS_hash_shardings);
     times.resize(FLAGS_hash_shardings);
-    mu.resize(FLAGS_hash_shardings);
 }
+
 url_map::~url_map() {
 }
 
-void url_map::stat(std::unordered_map<std::string, uint32_t> &candidates) {
+void url_map::stat(std::unordered_map<std::string, int32_t> &candidates) {
+    LOG("INFO: Stat starts.\n");
     url_heap heap(times);
     heap.build_heap();
+    
     std::string url;
+    // pick 100 most often emerged urls from url_heap
     while (heap.pop(url) == 1) {
         if (candidates.find(url) == candidates.end()) {
-            candidates[url] = 0;
+            // add to candidates
+            candidates[url] = -1;
+            LOG("INFO: Find a candidate >> %s <<\n", url.c_str());
         }
     }
+    
+    LOG("INFO: Stat is finished.\n");
+
     // clear old records
     for (int i = 0; i < maps.size(); ++i) {
-        std::unordered_map<std::string, uint32_t> tmp_map;
+        std::unordered_map<std::string, int32_t> tmp_map;
         std::vector<std::shared_ptr<URL>> tmp_v;
         {
         std::lock_guard<std::mutex> l(mu[i]);
         std::swap(tmp_map, maps[i]);
         times[i].swap(tmp_v);
+        }
+    }
 }
 
 void url_map::insert_url(const int idx, const std::string url) {
     {
         std::lock_guard<std::mutex> l(mu[idx]);
-        if (maps[idx].find(url) != maps[idx].end()) {
-            times[idx][maps[idx][url]].add();
-        } else {
+        if (maps[idx].find(url) == maps[idx].end()) {
             maps[idx][url] = times[idx].size();
             std::shared_ptr<URL> url_ptr = std::make_shared<URL>(url, 1);
             times[idx].emplace_back(url_ptr);
+        } else {
+            times[idx][maps[idx][url]]->add();
         }
     }
 }
 
 void url_map::sort(const int idx) {
-    // only be called after all urls inserted
+    // should only be called after all urls in a single read being inserted
     if (times[idx].empty())
         return;
     std::sort(times[idx].begin(), times[idx].end(), url_cmp);
-    std::size_t limit = (times[idx].size() > FLAGS_top_k)? FLAGS_top_k: times[idx].size();
-    std::shared_ptr<URL> topk_time = times[idx][limit - 1];
+    std::size_t local_topk = (times[idx].size() > FLAGS_top_k)? FLAGS_top_k: times[idx].size();
+    std::shared_ptr<URL> topk_time = times[idx][local_topk - 1];
+    
+    // For correctness, tired urls should also be included.
+    // Provided, U1, .., U99, U100, U101 are 101 most often emerged urls in Block 1,
+    //           U1, .., U99, U102, U101 are 101 most often emerged urls in Block 2.
+    // There is chance that U101 is the 100 most often emerged url.
+    // However if vectors are strictly cutted, wrong answers may follow.
     auto it = std::upper_bound(times[idx].begin(), times[idx].end(), topk_time, url_cmp);
     times[idx].erase(it, times[idx].end());
 }

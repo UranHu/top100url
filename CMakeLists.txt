@@ -1,5 +1,8 @@
-cmake_minimum_required (VERSION 2.8)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8)
 
-project (turl)
+ADD_DEFINITIONS(-std=c++11)
+ADD_DEFINITIONS(-g)
 
-add_executable(Demo main.cc MathFunctions.cc)
+PROJECT(TURL)
+
+ADD_SUBDIRECTORY(src bin)

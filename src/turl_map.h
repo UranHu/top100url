@@ -1,14 +1,14 @@
 #ifndef _H_URLMAP_
 #define _H_URLMAP_
 
-#include "turl_define.h"
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include "turl_define.h"
 
 namespace turl {
-
+// a priority queue to merge k sorted vectors.
 class url_heap {
     public:
         url_heap(std::vector< std::vector< std::shared_ptr<URL> > > &times);
@@ -35,13 +35,16 @@ class url_map {
     public:
         url_map();
         ~url_map();
-        void stat(std::unordered_map<std::string, uint32_t> &candidates);
+        void stat(std::unordered_map<std::string, int32_t> &candidates);
         void insert_url(const int idx, const std::string url);
         void sort(const int idx);
     private:
-        std::vector< std::unordered_map<std::string, uint32_t> > maps;
+        // multiple hashtables and vecotrs to support concurrency.
+        // <std::string, int32_t> -> <url,  index of the corresponding URL in times>
+        std::vector< std::unordered_map<std::string, int32_t> > maps;
         std::vector< std::vector< std::shared_ptr<URL> > > times;
-        std::vector<std::mutex> mu;
+        // using mutexes to protect hashtables.
+        std::mutex mu[4];
 };
 } //namespace turl
 

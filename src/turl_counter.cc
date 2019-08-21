@@ -2,21 +2,26 @@
 #include "turl_counter.h"
 
 namespace turl {
-    URLCounter::URLCounter(std::shared_ptr<url_map> map, char* buf, const int64_t start, const int64_t end, const int id, std::shared_ptr<std::condition_variable> cv): 
+    url_counter::url_counter(std::shared_ptr<url_map> map, char* buf, const int64_t start, const int64_t end, const int id, int max_r): 
                 map_(map), 
                 buf_(buf),
                 start_(start),
                 end_(end),
                 id_(id),
-                cv_(cv) {}
-    URLCounter::~URLCounter() {}
+                max_round(max_r),
+                round(0) {}
+    url_counter::~url_counter() {}
     
     void split(const char* ch, int64_t &p) {
         p = 0;
         while ((*(ch + p) != '\n') && (*(ch + p) != EOF)) { p++; } 
     }
 
-    void URLCounter::count() {
+    void url_counter::count() {
+        LOG("INFO: Counter%d starts counting, current round %d, max round %d\n", id_, round + 1, max_round);
+        if (round >= max_round)
+            return;
+
         int64_t pos = start_;
         if ((start_ == 0) || (*(buf_ + start_ - 1) == '\n')) {
         } else {
@@ -29,13 +34,18 @@ namespace turl {
             int64_t p;
             split(buf_ + pos, p);
             std::string url(buf_ + pos, p);
-            int hash_id = str_hash(url) % FLAGS_hash_shardings; 
-            map_->insert_url(hash_id, url);
+            if (p > 2048) {
+                LOG("ERROR: get a invaild url, maybe input file is not compliant. >> %s << counter_id %d, round %d, pos %ld length %ld\n", url.c_str(), id_, round, pos, p);
+            } else {
+                int hash_id = str_hash(url) % FLAGS_hash_shardings; 
+                map_->insert_url(hash_id, url);
+            }
             pos += p + 1;
             if ((*(buf_ + pos - 1)) == EOF) {
                 break;
             }
         }
-        map_->sort(id_);
+        LOG("INFO: Counter%d finishs round %d.\n", id_, round + 1);
+        round++;
     }       
 } //namespace turl
