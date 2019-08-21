@@ -2,13 +2,10 @@
 #include "turl_counter.h"
 
 namespace turl {
-    url_counter::url_counter(std::shared_ptr<url_map> map, char* buf, const int64_t start, const int64_t end, const int id, int max_r): 
+    url_counter::url_counter(std::shared_ptr<url_map> map, char* buf, const int id): 
                 map_(map), 
                 buf_(buf),
-                start_(start),
-                end_(end),
                 id_(id),
-                max_round(max_r),
                 round(0) {}
     url_counter::~url_counter() {}
     
@@ -37,7 +34,7 @@ namespace turl {
             if (p > 2048) {
                 LOG("ERROR: get a invaild url, maybe input file is not compliant. >> %s << counter_id %d, round %d, pos %ld length %ld\n", url.c_str(), id_, round, pos, p);
             } else {
-                int hash_id = str_hash(url) % FLAGS_hash_shardings; 
+                int hash_id = (str_hash(url) > 2) % FLAGS_hash_shardings; 
                 map_->insert_url(hash_id, url);
             }
             pos += p + 1;

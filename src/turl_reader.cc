@@ -7,9 +7,25 @@
 namespace turl {
 
 url_reader::url_reader(const std::string fp):
-        file_path_(fp),
-        fd_(-1),
-        pos_(0) {
+        fd_(0) {
+    init(fp);
+}
+
+url_reader::~url_reader() {
+    if (close(fd_) == -1) {
+        LOG("FATAL: Close file failed.\n");
+    }
+}
+
+void url_reader::init(const std::string fp) {
+    if (fd_ > 0) {
+        if (close(fd_) == -1) {
+            LOG("FATAL: Close file failed.\n");
+        }
+    }
+
+    file_path_ = fp;
+    pos_ = 0; 
     struct stat statbuf;
     if (stat(file_path_.c_str(), &statbuf) != 0) {
         LOG("FATAL: Get file size failed.\n");
@@ -20,12 +36,6 @@ url_reader::url_reader(const std::string fp):
     if (fd_ == -1) {
         LOG("FATAL: Open file failed\n");
         exit(EXIT_FAILURE);
-    }
-}
-
-url_reader::~url_reader() {
-    if (close(fd_) == -1) {
-        LOG("FATAL: Close file failed.\n");
     }
 }
 

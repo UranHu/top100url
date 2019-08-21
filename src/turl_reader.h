@@ -11,7 +11,9 @@ namespace turl{
     public:
         url_reader(const std::string fp);
         ~url_reader();
+        void init(const std::string fp);
         void read_file(void* buf);
+        void next_block() {}
         bool finish() { return pos_ > file_size_; }
         bool start() { return pos_ != 0; }
         int64_t file_size() { return file_size_; }

@@ -8,6 +8,7 @@ namespace turl {
 DECLARE_string(conf_path);
 DECLARE_string(url_file);
 DECLARE_int32(top_k);
+DECLARE_int32(sfile_num);
 DECLARE_int64(block_size);
 DECLARE_int64(counter_num);
 DECLARE_int64(hash_shardings);

@@ -15,7 +15,7 @@ class url_heap {
         ~url_heap();
         void build_heap();
         void heapify(int i);
-        int pop(std::string &s);
+        int pop(std::shared_ptr<URL> &url);
     private:
         struct heap_node {
             std::shared_ptr<URL> url;
@@ -35,9 +35,10 @@ class url_map {
     public:
         url_map();
         ~url_map();
-        void stat(std::unordered_map<std::string, int32_t> &candidates);
+        void stat();
         void insert_url(const int idx, const std::string url);
         void sort(const int idx);
+        std::vector< std::shared_ptr<URL> >& top_k() { return times[FLAGS_counter_num]; }
     private:
         // multiple hashtables and vecotrs to support concurrency.
         // <std::string, int32_t> -> <url,  index of the corresponding URL in times>

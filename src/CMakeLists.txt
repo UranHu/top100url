@@ -5,6 +5,7 @@ main.cc;
 turl_reader.cc;
 turl_counter.cc;
 turl_map.cc;
+turl_split.cc;
 turl_define.cc)
 
 FIND_PACKAGE(gflags REQUIRED)

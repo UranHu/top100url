@@ -57,20 +57,17 @@ void url_heap::heapify(int i) {
     } 
 }
 
-int url_heap::pop(std::string &s) {
-    s = "";
+int url_heap::pop(std::shared_ptr<URL> &url) {
+    url = nullptr;
     if (heap_size_== 0) {
         return -1;
     }
     auto it = heap_.begin();
-    if (poped > FLAGS_top_k && it->url->t_ < topk_t_) {
+    if (poped > FLAGS_top_k) {
         return -1;
     }
-    s = it->url->url_;
+    url = it->url;
     std::size_t vid = it->vid;
-    if (++poped == FLAGS_top_k) {
-        topk_t_ = it->url->t_;
-    }
     if (times_[vid].size() > cursors_[vid]) {
         heap_node node(times_[vid][cursors_[vid]], vid);
         (*it) = node;
@@ -79,6 +76,7 @@ int url_heap::pop(std::string &s) {
         swap(0, heap_size_-1);
         heap_size_--;
     }
+    poped++;
     heapify(0);
     return 1;
 }
@@ -91,29 +89,27 @@ void url_heap::swap(int i, int j) {
 
 url_map::url_map() {
     maps.resize(FLAGS_hash_shardings);
-    times.resize(FLAGS_hash_shardings);
+    times.resize(FLAGS_hash_shardings + 1);
 }
 
 url_map::~url_map() {
 }
 
-void url_map::stat(std::unordered_map<std::string, int32_t> &candidates) {
+void url_map::stat() {
     LOG("INFO: Stat starts.\n");
     url_heap heap(times);
     heap.build_heap();
-    
-    std::string url;
+    std::vector< std::shared_ptr<URL> > temp_topk;
+    std::shared_ptr<URL> url;
     // pick 100 most often emerged urls from url_heap
     while (heap.pop(url) == 1) {
-        if (candidates.find(url) == candidates.end()) {
-            // add to candidates
-            candidates[url] = -1;
-            LOG("INFO: Find a candidate >> %s <<\n", url.c_str());
-        }
+        temp_topk.emplace_back(url);
     }
     
-    LOG("INFO: Stat is finished.\n");
+    times[FLAGS_counter_num].swap(temp_topk);
 
+    LOG("INFO: Stat is finished.\n");
+    
     // clear old records
     for (int i = 0; i < maps.size(); ++i) {
         std::unordered_map<std::string, int32_t> tmp_map;
@@ -134,24 +130,19 @@ void url_map::insert_url(const int idx, const std::string url) {
             std::shared_ptr<URL> url_ptr = std::make_shared<URL>(url, 1);
             times[idx].emplace_back(url_ptr);
         } else {
-            times[idx][maps[idx][url]]->add();
+            (times[idx][maps[idx][url]]->t_)++;
         }
     }
 }
 
 void url_map::sort(const int idx) {
-    // should only be called after all urls in a single read being inserted
+    // should only be called after all urls in a spilt file being inserted
     if (times[idx].empty())
         return;
     std::sort(times[idx].begin(), times[idx].end(), url_cmp);
     std::size_t local_topk = (times[idx].size() > FLAGS_top_k)? FLAGS_top_k: times[idx].size();
     std::shared_ptr<URL> topk_time = times[idx][local_topk - 1];
     
-    // For correctness, tired urls should also be included.
-    // Provided, U1, .., U99, U100, U101 are 101 most often emerged urls in Block 1,
-    //           U1, .., U99, U102, U101 are 101 most often emerged urls in Block 2.
-    // There is chance that U101 is the 100 most often emerged url.
-    // However if vectors are strictly cutted, wrong answers may follow.
     auto it = std::upper_bound(times[idx].begin(), times[idx].end(), topk_time, url_cmp);
     times[idx].erase(it, times[idx].end());
 }
