@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <memory.h>
 #include "turl_reader.h" 
 #include "turl_counter.h"
 #include "turl_split.h"
@@ -15,6 +16,7 @@
 
 using namespace turl;
 
+// using atomic varaibles and cv to synchronize
 std::atomic<int> counted;
 std::atomic<int> sorted;
 std::atomic<int> splited;
@@ -27,9 +29,9 @@ std::mutex mu;
 void read_file(char* buf, url_reader &r) {
     while(!r.finish()) {
         producer_ready.store(true, std::memory_order_release);
-        while (customers_ready.load(std::memory_order_acquire) != FLAGS_counter_num) { usleep(100); }
+        while (customers_ready.load(std::memory_order_acquire) != FLAGS_worker_num) { usleep(100); }
         producer_ready.store(false, std::memory_order_release);
-        while (r.start() && splited.load(std::memory_order_acquire) != FLAGS_counter_num) { usleep(100); }
+        while (r.start() && splited.load(std::memory_order_acquire) != FLAGS_worker_num) { usleep(100); }
         splited.store(0, std::memory_order_release);
         customers_ready.store(0, std::memory_order_release);
         {
@@ -61,9 +63,10 @@ void read_spilt_file(char* buf, url_reader &r, std::shared_ptr<url_map> map, std
         LOG("INFO: read split file%d.\n", i);
         std::string splited_file = file_list[i];
         r.init(splited_file);
+        //memset(buf, '\n', sizeof(char) * (FLAGS_block_size + MAX_URL_LEN));
         while(!r.finish()) {
             producer_ready.store(true, std::memory_order_release);
-            while (customers_ready.load(std::memory_order_acquire) != FLAGS_counter_num) { usleep(100); }
+            while (customers_ready.load(std::memory_order_acquire) != FLAGS_worker_num) { usleep(100); }
             producer_ready.store(false, std::memory_order_release);
             counted.store(0, std::memory_order_release);
             customers_ready.store(0, std::memory_order_release);
@@ -72,10 +75,9 @@ void read_spilt_file(char* buf, url_reader &r, std::shared_ptr<url_map> map, std
             r.read_file((void *)buf);
             }
             cv2.notify_all();
-            LOG("INFO: Cv2 notify all\n");
-            while (counted.load(std::memory_order_acquire) != FLAGS_counter_num) { usleep(100); }
+            while (counted.load(std::memory_order_acquire) != FLAGS_worker_num) { usleep(100); }
         }
-        while (sorted.load(std::memory_order_acquire) != FLAGS_counter_num) { usleep(100); }
+        while (sorted.load(std::memory_order_acquire) != FLAGS_worker_num) { usleep(100); }
         customers_ready.store(0, std::memory_order_release);
         map->stat();
         counted.store(0, std::memory_order_release);
@@ -89,17 +91,17 @@ void count(url_reader &r, url_counter &counter, std::shared_ptr<url_map> map) {
         int id = counter.id();
         int max_round;
         if (r.file_size() <= FLAGS_block_size) {
-            int64_t interval_size = r.file_size() / FLAGS_counter_num;
+            int64_t interval_size = r.file_size() / FLAGS_worker_num;
             max_round = 1;
             counter.start_at(id * interval_size);
-            counter.end_at((id == FLAGS_counter_num - 1)? r.file_size(): (id + 1) * interval_size - 1);
+            counter.end_at((id == FLAGS_worker_num - 1)? r.file_size(): (id + 1) * interval_size - 1);
             counter.set_max_round(1);
         } else {
-            int64_t interval_size = FLAGS_block_size / FLAGS_counter_num;
+            int64_t interval_size = FLAGS_block_size / FLAGS_worker_num;
             int r1 = r.file_size() / FLAGS_block_size;
             int tail_counter_id = (r.file_size() % FLAGS_block_size) / interval_size + 1;
             counter.start_at(id * interval_size);
-            counter.end_at((id == FLAGS_counter_num - 1)? r.file_size(): (id + 1) * interval_size - 1);
+            counter.end_at((id == FLAGS_worker_num - 1)? r.file_size(): (id + 1) * interval_size - 1);
             max_round = r1+1;
             counter.set_max_round((id < tail_counter_id)? r1+1: r1);
         }
@@ -107,13 +109,12 @@ void count(url_reader &r, url_counter &counter, std::shared_ptr<url_map> map) {
             {
             std::unique_lock<std::mutex> guard(mu);
             customers_ready.fetch_add(1, std::memory_order_acq_rel);
-            std::cout << customers_ready.load() << std::endl;
             cv2.wait(guard);
             }
             counter.count();
             counted.fetch_add(1, std::memory_order_acq_rel);
         }
-        while (counted.load(std::memory_order_acquire) != FLAGS_counter_num) { usleep(100); }
+        while (counted.load(std::memory_order_acquire) != FLAGS_worker_num) { usleep(100); }
         map->sort(counter.id());
         sorted.fetch_add(1, std::memory_order_acq_rel);
     }
@@ -123,7 +124,18 @@ int main(int argc, char* argv[]) {
     
     gflags::ParseCommandLineFlags(&argc, &argv, true); 
 
-    char *buf = (char*)malloc((FLAGS_block_size + 2048) * sizeof(char));
+    if ((FLAGS_worker_num != FLAGS_hash_shardings) || (FLAGS_sfile_num > 4096)) {
+        LOG("FATAL: Invalid args.\n");
+        exit(1);
+    }
+    
+    if (FLAGS_block_size > 512 * 1024 * 1024) {
+        LOG("FATAL: Invalid args.\n");
+        exit(1);   
+    }
+
+    // Phase 1: divide large input file into small files.
+    char *buf = (char*)malloc((FLAGS_block_size + MAX_URL_LEN) * sizeof(char));
     
     std::shared_ptr<url_map> map = std::make_shared<url_map>();
 
@@ -147,25 +159,25 @@ int main(int argc, char* argv[]) {
     std::vector<std::thread> split_threads;
     std::vector<url_split> splits;
 
-    int64_t interval_size = FLAGS_block_size / FLAGS_counter_num;
+    int64_t interval_size = FLAGS_block_size / FLAGS_worker_num;
     int tail = r.file_size() % FLAGS_block_size;
     int r1 = r.file_size() / FLAGS_block_size;
     int tail_counter_id = (tail / interval_size) + 1;
-    for (int i = 0; i < FLAGS_counter_num; i++) {
+    for (int i = 0; i < FLAGS_worker_num; i++) {
         int64_t start = i * interval_size;
-        int64_t end = (i == FLAGS_counter_num - 1)? FLAGS_block_size: (i + 1) * interval_size - 1;
+        int64_t end = (i == FLAGS_worker_num - 1)? FLAGS_block_size: (i + 1) * interval_size - 1;
         url_split sp(buf, start, end, i, (i < tail_counter_id)? r1+1:r1, fd);
-        LOG("INFO: Construct counter%d, start %ld, end %ld\n", i, start, end);
+        LOG("INFO: Construct spilit%d, start %ld, end %ld\n", i, start, end);
         splits.emplace_back(sp);
     }
 
-    for(int i = 0; i < FLAGS_counter_num; i++) {
+    for(int i = 0; i < FLAGS_worker_num; i++) {
         split_threads.emplace_back(std::move(std::thread(split, std::ref(r), std::ref(splits[i]))));
     }
 
     std::thread t1(read_file, buf, std::ref(r));
     t1.join();
-    for (int i = 0; i < FLAGS_counter_num; i++) {
+    for (int i = 0; i < FLAGS_worker_num; i++) {
         split_threads[i].join();
     }
 
@@ -177,29 +189,28 @@ int main(int argc, char* argv[]) {
             }
     }
 
-    LOG("Phase 1 finished.\n");
-
+    // Phase 2: read splited files and find 100 most often emerged url in a single file.
     std::thread t2(read_spilt_file, buf, std::ref(r), map, std::ref(sp_file_list));
     
     std::vector<std::thread> counter_threads;
     std::vector<url_counter> counters;
-    for (int i = 0; i < FLAGS_counter_num; i++) {
+    for (int i = 0; i < FLAGS_worker_num; i++) {
         url_counter c(map, buf, i);
         LOG("INFO: Construct counter%d.\n", i);
         counters.emplace_back(c);
     }
 
-    for(int i = 0; i < FLAGS_counter_num; i++) {
+    for(int i = 0; i < FLAGS_worker_num; i++) {
         counter_threads.emplace_back(std::move(std::thread(count, std::ref(r), std::ref(counters[i]), map)));
     }
 
     t2.join();
-    for (int i = 0; i < FLAGS_counter_num; i++) {
+    for (int i = 0; i < FLAGS_worker_num; i++) {
         counter_threads[i].join();
     }
     
+    // Output ans.
     std::vector< std::shared_ptr<URL> >& topk = map->top_k();
-
     for (int i = 0; i < topk.size(); i++) {
         std::cout << topk[i]->url_ << " " << topk[i]->t_ << std::endl;
     }

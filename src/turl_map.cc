@@ -2,7 +2,11 @@
 #include "turl_map.h"
 
 namespace turl {
-bool url_cmp(std::shared_ptr<URL> a, std::shared_ptr<URL> b) {
+bool url_cmp_1(std::shared_ptr<URL> a, std::shared_ptr<URL> b) {
+    return a->t_ > b->t_;
+}
+
+bool url_cmp_2(std::shared_ptr<URL> a, std::shared_ptr<URL> b) {
     return a->t_ < b->t_;
 }
 
@@ -89,7 +93,12 @@ void url_heap::swap(int i, int j) {
 
 url_map::url_map() {
     maps.resize(FLAGS_hash_shardings);
+    // times[FLAGS_hash_shardings] is used to store an aggregated result.
     times.resize(FLAGS_hash_shardings + 1);
+    for (int i = 0; i < FLAGS_hash_shardings; i++) {
+        std::shared_ptr< std::mutex > p = std::make_shared<std::mutex>();
+        mu.emplace_back(p);
+    }
 }
 
 url_map::~url_map() {
@@ -106,7 +115,7 @@ void url_map::stat() {
         temp_topk.emplace_back(url);
     }
     
-    times[FLAGS_counter_num].swap(temp_topk);
+    times[FLAGS_worker_num].swap(temp_topk);
 
     LOG("INFO: Stat is finished.\n");
     
@@ -115,7 +124,7 @@ void url_map::stat() {
         std::unordered_map<std::string, int32_t> tmp_map;
         std::vector<std::shared_ptr<URL>> tmp_v;
         {
-        std::lock_guard<std::mutex> l(mu[i]);
+        std::lock_guard<std::mutex> l(*(mu[i]));
         std::swap(tmp_map, maps[i]);
         times[i].swap(tmp_v);
         }
@@ -124,7 +133,7 @@ void url_map::stat() {
 
 void url_map::insert_url(const int idx, const std::string url) {
     {
-        std::lock_guard<std::mutex> l(mu[idx]);
+        std::lock_guard<std::mutex> l(*(mu[idx]));
         if (maps[idx].find(url) == maps[idx].end()) {
             maps[idx][url] = times[idx].size();
             std::shared_ptr<URL> url_ptr = std::make_shared<URL>(url, 1);
@@ -139,12 +148,14 @@ void url_map::sort(const int idx) {
     // should only be called after all urls in a spilt file being inserted
     if (times[idx].empty())
         return;
-    std::sort(times[idx].begin(), times[idx].end(), url_cmp);
+    std::sort(times[idx].begin(), times[idx].end(), url_cmp_1);
     std::size_t local_topk = (times[idx].size() > FLAGS_top_k)? FLAGS_top_k: times[idx].size();
     std::shared_ptr<URL> topk_time = times[idx][local_topk - 1];
     
-    auto it = std::upper_bound(times[idx].begin(), times[idx].end(), topk_time, url_cmp);
+    auto it = std::upper_bound(times[idx].begin(), times[idx].end(), topk_time, url_cmp_2);
     times[idx].erase(it, times[idx].end());
+    for (int i = 0; i < times[idx].size(); i++) {
+    }
 }
 
 } //namespace turl

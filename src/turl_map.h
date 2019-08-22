@@ -38,14 +38,15 @@ class url_map {
         void stat();
         void insert_url(const int idx, const std::string url);
         void sort(const int idx);
-        std::vector< std::shared_ptr<URL> >& top_k() { return times[FLAGS_counter_num]; }
+        std::vector< std::shared_ptr<URL> >& top_k() { return times[FLAGS_worker_num]; }
     private:
         // multiple hashtables and vecotrs to support concurrency.
         // <std::string, int32_t> -> <url,  index of the corresponding URL in times>
+        // each sharding has a responding hashtable and vector.
         std::vector< std::unordered_map<std::string, int32_t> > maps;
         std::vector< std::vector< std::shared_ptr<URL> > > times;
         // using mutexes to protect hashtables.
-        std::mutex mu[4];
+        std::vector< std::shared_ptr< std::mutex > > mu;
 };
 } //namespace turl
 

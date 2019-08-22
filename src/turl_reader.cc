@@ -31,7 +31,7 @@ void url_reader::init(const std::string fp) {
         LOG("FATAL: Get file size failed.\n");
     }
     file_size_ = statbuf.st_size; 
-    map_len = (FLAGS_block_size < file_size_)? FLAGS_block_size + 2048 : file_size_ + 2048;
+    map_len = (FLAGS_block_size < file_size_)? FLAGS_block_size + MAX_URL_LEN : file_size_ + MAX_URL_LEN;
     fd_ = open(file_path_.c_str(), O_RDONLY);
     if (fd_ == -1) {
         LOG("FATAL: Open file failed\n");
@@ -48,6 +48,6 @@ void url_reader::read_file(void *buf) {
         pos_ += map_len + 1; 
         LOG("INFO: Current reader pos >> %ld <<\n", pos_);
         map_len = (FLAGS_block_size < file_size_ - pos_ + 1)? FLAGS_block_size : file_size_ - pos_ + 1;
-        map_len += 2048;
+        map_len += MAX_URL_LEN;
 }
 } //namespace turl

@@ -16,7 +16,7 @@ namespace turl {
 
     void url_counter::count() {
         LOG("INFO: Counter%d starts counting, current round %d, max round %d\n", id_, round + 1, max_round);
-        if (round >= max_round)
+        if (round >= max_round || start_ == end_)
             return;
 
         int64_t pos = start_;
@@ -27,11 +27,11 @@ namespace turl {
             pos += p + 1;
         }
         std::hash<std::string> str_hash;
-        while(pos <= end_) {
+        while(pos < end_) {
             int64_t p;
             split(buf_ + pos, p);
             std::string url(buf_ + pos, p);
-            if (p > 2048) {
+            if (p > MAX_URL_LEN) {
                 LOG("ERROR: get a invaild url, maybe input file is not compliant. >> %s << counter_id %d, round %d, pos %ld length %ld\n", url.c_str(), id_, round, pos, p);
             } else {
                 int hash_id = (str_hash(url) > 2) % FLAGS_hash_shardings; 

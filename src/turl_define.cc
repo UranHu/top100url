@@ -12,7 +12,7 @@ DEFINE_int32(sfile_num, 512, "split file num.");
 
 DEFINE_int64(block_size, 256 * 1024 * 1024, "single reading block size");
 
-DEFINE_int64(counter_num, 4, "number of counters");
+DEFINE_int64(worker_num, 4, "number of counters");
 
 DEFINE_int64(hash_shardings, 4, "number of hash shardings");
 

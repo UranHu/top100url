@@ -38,7 +38,7 @@ namespace turl {
             int64_t p;
             split_url(buf_ + pos, p);
             std::string url(buf_ + pos, p + 1);
-            if (p > 2048) {
+            if (p > MAX_URL_LEN) {
                 LOG("ERROR: get a invaild url, maybe input file is not compliant. >> %s << counter_id %d, round %d, pos %ld length %ld\n", url.c_str(), id_, round, pos, p);
             } else {
                 int16_t hash_id = str_hash(url) % FLAGS_sfile_num; 
