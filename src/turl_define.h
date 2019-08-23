@@ -16,14 +16,6 @@ DECLARE_int64(block_size);
 DECLARE_int64(worker_num);
 DECLARE_int64(hash_shardings);
 
-struct URL {
-    std::string url_;
-    uint32_t t_;
-    void add() { t_++; }
-    URL(std::string url, uint32_t t): url_(url), t_(t) {}
-    URL(): url_(std::string()), t_(0) {}
-};
-
 #define LOG(format, ...) \
 fprintf(stderr, format, ##__VA_ARGS__) 
 

@@ -6,9 +6,8 @@
 #include <fcntl.h>
 namespace turl {
 
-url_reader::url_reader(const std::string fp):
-        fd_(0) {
-    init(fp);
+url_reader::url_reader(url_buf& b):
+        buf_(b) {
 }
 
 url_reader::~url_reader() {
@@ -31,7 +30,7 @@ void url_reader::init(const std::string fp) {
         LOG("FATAL: Get file size failed.\n");
     }
     file_size_ = statbuf.st_size; 
-    map_len = (FLAGS_block_size < file_size_)? FLAGS_block_size + MAX_URL_LEN : file_size_ + MAX_URL_LEN;
+    next_read_ = (FLAGS_block_size < file_size_)? FLAGS_block_size + MAX_URL_LEN : file_size_ + MAX_URL_LEN;
     fd_ = open(file_path_.c_str(), O_RDONLY);
     if (fd_ == -1) {
         LOG("FATAL: Open file failed\n");
@@ -40,14 +39,14 @@ void url_reader::init(const std::string fp) {
 }
 
 void url_reader::read_file(void *buf) { 
-        LOG("INFO: Read length %ld.\n", map_len);
+        LOG("INFO: Read length %ld.\n", next_read_);
 
-        if (read(fd_, buf, map_len) == -1) {
-            LOG("FATAL: Read file failed, pos: %ld, length: %ld.\n", pos_, map_len);
+        if (read(fd_, buf, next_read_) == -1) {
+            LOG("FATAL: Read file failed, pos: %ld, length: %ld.\n", pos_, next_read_);
         }
-        pos_ += map_len + 1; 
+        pos_ += next_read_ + 1; 
         LOG("INFO: Current reader pos >> %ld <<\n", pos_);
-        map_len = (FLAGS_block_size < file_size_ - pos_ + 1)? FLAGS_block_size : file_size_ - pos_ + 1;
-        map_len += MAX_URL_LEN;
+        next_read_ = (FLAGS_block_size < file_size_ - pos_ + 1)? FLAGS_block_size : file_size_ - pos_ + 1;
+        next_read_ += MAX_URL_LEN;
 }
 } //namespace turl

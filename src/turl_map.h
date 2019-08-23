@@ -5,27 +5,22 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <utility>
 #include "turl_define.h"
 
 namespace turl {
-// a priority queue to merge k sorted vectors.
+// a heap to pick out top k most emerged url for now.
 class url_heap {
     public:
-        url_heap(std::vector< std::vector< std::shared_ptr<URL> > > &times);
-        ~url_heap();
+        url_heap(std::vector< std::unordered_map<std::string, int32_t> > &times);
+        ~url_heap() = default;
         void build_heap();
         void heapify(int i);
-        int pop(std::shared_ptr<URL> &url);
+        int pop(std::pair<std::string, int32_t> &url_p);
     private:
-        struct heap_node {
-            std::shared_ptr<URL> url;
-            std::size_t vid;
-            heap_node(std::shared_ptr<URL> u, std::size_t id): url(u), vid(id) {}
-        };
         void swap(int i, int j);
-        std::vector<heap_node> heap_;
-        std::vector< std::vector< std::shared_ptr<URL> > > &times_;
-        std::vector<std::int32_t> cursors_;
+        std::vector< std::unordered_map<std::string, int32_t>::iterator > heap_;
+        std::vector< std::unordered_map<std::string, int32_t> > &times_;
         int poped;
         int topk_t_;
         int heap_size_;
@@ -34,17 +29,14 @@ class url_heap {
 class url_map {
     public:
         url_map();
-        ~url_map();
+        ~url_map() = default;
         void stat();
         void insert_url(const int idx, const std::string url);
-        void sort(const int idx);
-        std::vector< std::shared_ptr<URL> >& top_k() { return times[FLAGS_worker_num]; }
+        std::unordered_map<std::string, int32_t>& top_k() { return maps[FLAGS_worker_num]; }
     private:
-        // multiple hashtables and vecotrs to support concurrency.
-        // <std::string, int32_t> -> <url,  index of the corresponding URL in times>
-        // each sharding has a responding hashtable and vector.
+        // multiple hashtables to support concurrency.
+        // <std::string, int32_t> -> <url,  emerged times>
         std::vector< std::unordered_map<std::string, int32_t> > maps;
-        std::vector< std::vector< std::shared_ptr<URL> > > times;
         // using mutexes to protect hashtables.
         std::vector< std::shared_ptr< std::mutex > > mu;
 };

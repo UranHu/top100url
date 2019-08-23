@@ -44,6 +44,13 @@
         "typeindex": "cpp",
         "typeinfo": "cpp",
         "utility": "cpp",
-        "iostream": "cpp"
+        "iostream": "cpp",
+        "cstdarg": "cpp",
+        "bitset": "cpp",
+        "complex": "cpp",
+        "list": "cpp",
+        "algorithm": "cpp",
+        "iomanip": "cpp",
+        "cfenv": "cpp"
     }
 }

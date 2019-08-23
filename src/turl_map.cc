@@ -2,31 +2,18 @@
 #include "turl_map.h"
 
 namespace turl {
-bool url_cmp_1(std::shared_ptr<URL> a, std::shared_ptr<URL> b) {
-    return a->t_ > b->t_;
-}
 
-bool url_cmp_2(std::shared_ptr<URL> a, std::shared_ptr<URL> b) {
-    return a->t_ < b->t_;
-}
-
-url_heap::url_heap(std::vector< std::vector< std::shared_ptr<URL> > > &times):
+url_heap::url_heap(std::vector< std::unordered_map<std::string, int32_t> > &times):
             times_(times),
             poped(0),
             topk_t_(0),
             heap_size_(0) {
 }
 
-url_heap::~url_heap() { }
-
 void url_heap::build_heap() {
     for (int i = 0; i < times_.size(); i++) {
-        if (!times_[i].empty()) {
-            heap_node node(times_[i][0], i);
-            heap_.emplace_back(node);
-            cursors_.emplace_back(1);
-        } else {
-            cursors_.emplace_back(0);
+        for (auto it = times_[i].begin(); it != times_[i].end(); it++) {
+            heap_.emplace_back(it);
         }
     }
     heap_size_ = heap_.size();
@@ -34,10 +21,10 @@ void url_heap::build_heap() {
     for (int i = heap_size_ / 2 - 1; i >= 0; i--) {
         int l = (i * 2 + 1);
         int r = i * 2 + 2;
-        if (r < heap_size_ && heap_[r].url->t_ > heap_[i].url->t_) {
+        if (r < heap_size_ && heap_[r]->second > heap_[i]->second) {
             swap(i, r);
         }
-        if (l < heap_size_ && heap_[l].url->t_ > heap_[i].url->t_) {
+        if (l < heap_size_ && heap_[l]->second > heap_[i]->second) {
             swap(i, l);
         }
     }
@@ -49,84 +36,75 @@ void url_heap::heapify(int i) {
     int l = (i * 2 + 1);
     int r = i * 2 + 2;
     if (l < heap_size_ && r < heap_size_) {
-    int max_child = (heap_[l].url->t_ > heap_[r].url->t_)? l: r;
-        if (heap_[max_child].url->t_ > heap_[i].url->t_) {
+    int max_child = (heap_[l]->second > heap_[r]->second)? l: r;
+        if (heap_[max_child]->second > heap_[i]->second) {
             swap(i, max_child);
             heapify(max_child);
         }
     } else if (l < heap_size_) {
-        if (heap_[l].url->t_ > heap_[i].url->t_) {
+        if (heap_[l]->second > heap_[i]->second) {
             swap(i, l);
         }  
     } 
 }
 
-int url_heap::pop(std::shared_ptr<URL> &url) {
-    url = nullptr;
+int url_heap::pop(std::pair<std::string, int32_t> &url_p) {
+    url_p.first = "";
+    url_p.second = 0;
     if (heap_size_== 0) {
         return -1;
     }
-    auto it = heap_.begin();
+    auto it = heap_[0];
     if (poped > FLAGS_top_k) {
         return -1;
     }
-    url = it->url;
-    std::size_t vid = it->vid;
-    if (times_[vid].size() > cursors_[vid]) {
-        heap_node node(times_[vid][cursors_[vid]], vid);
-        (*it) = node;
-        cursors_[vid]++;
-    } else {
+    url_p = *it;
+    if (heap_size_ > 1) {
         swap(0, heap_size_-1);
-        heap_size_--;
     }
+    heap_size_--;
     poped++;
     heapify(0);
     return 1;
 }
 
 void url_heap::swap(int i, int j) {
-    heap_node tmp = heap_[i];
+    auto tmp = heap_[i];
     heap_[i] = heap_[j];
     heap_[j] = tmp;
 }
 
 url_map::url_map() {
-    maps.resize(FLAGS_hash_shardings);
-    // times[FLAGS_hash_shardings] is used to store an aggregated result.
-    times.resize(FLAGS_hash_shardings + 1);
+    // maps[FLAGS_hash_shardings] is used to store an aggregated result.
+    maps.resize(FLAGS_hash_shardings + 1);
     for (int i = 0; i < FLAGS_hash_shardings; i++) {
         std::shared_ptr< std::mutex > p = std::make_shared<std::mutex>();
         mu.emplace_back(p);
     }
 }
 
-url_map::~url_map() {
-}
 
 void url_map::stat() {
     LOG("INFO: Stat starts.\n");
-    url_heap heap(times);
+    url_heap heap(maps);
     heap.build_heap();
-    std::vector< std::shared_ptr<URL> > temp_topk;
-    std::shared_ptr<URL> url;
+    std::unordered_map<std::string, int32_t> temp_topk;
+    std::pair<std::string, int32_t> url;
     // pick 100 most often emerged urls from url_heap
     while (heap.pop(url) == 1) {
-        temp_topk.emplace_back(url);
+        temp_topk[url.first] = url.second;
     }
     
-    times[FLAGS_worker_num].swap(temp_topk);
+    maps[FLAGS_hash_shardings].swap(temp_topk);
 
     LOG("INFO: Stat is finished.\n");
     
     // clear old records
-    for (int i = 0; i < maps.size(); ++i) {
+    for (int i = 0; i < FLAGS_hash_shardings; ++i) {
         std::unordered_map<std::string, int32_t> tmp_map;
-        std::vector<std::shared_ptr<URL>> tmp_v;
         {
         std::lock_guard<std::mutex> l(*(mu[i]));
         std::swap(tmp_map, maps[i]);
-        times[i].swap(tmp_v);
         }
     }
 }
@@ -135,26 +113,10 @@ void url_map::insert_url(const int idx, const std::string url) {
     {
         std::lock_guard<std::mutex> l(*(mu[idx]));
         if (maps[idx].find(url) == maps[idx].end()) {
-            maps[idx][url] = times[idx].size();
-            std::shared_ptr<URL> url_ptr = std::make_shared<URL>(url, 1);
-            times[idx].emplace_back(url_ptr);
+            maps[idx][url] = 1;
         } else {
-            (times[idx][maps[idx][url]]->t_)++;
+            maps[idx][url] += 1;
         }
-    }
-}
-
-void url_map::sort(const int idx) {
-    // should only be called after all urls in a spilt file being inserted
-    if (times[idx].empty())
-        return;
-    std::sort(times[idx].begin(), times[idx].end(), url_cmp_1);
-    std::size_t local_topk = (times[idx].size() > FLAGS_top_k)? FLAGS_top_k: times[idx].size();
-    std::shared_ptr<URL> topk_time = times[idx][local_topk - 1];
-    
-    auto it = std::upper_bound(times[idx].begin(), times[idx].end(), topk_time, url_cmp_2);
-    times[idx].erase(it, times[idx].end());
-    for (int i = 0; i < times[idx].size(); i++) {
     }
 }
 

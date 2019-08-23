@@ -13,6 +13,7 @@
 #include "turl_counter.h"
 #include "turl_split.h"
 #include "turl_map.h"
+#include "turl_buf.h"
 
 using namespace turl;
 
@@ -120,23 +121,22 @@ void count(url_reader &r, url_counter &counter, std::shared_ptr<url_map> map) {
     }
 }
 
-int main(int argc, char* argv[]) {
-    
+void init(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true); 
-
-    if ((FLAGS_worker_num != FLAGS_hash_shardings) || (FLAGS_sfile_num > 4096)) {
+    if ((FLAGS_worker_num != FLAGS_hash_shardings) 
+        || (FLAGS_sfile_num > 4096) || (FLAGS_block_size > 512 * 1024 * 1024)) {
         LOG("FATAL: Invalid args.\n");
         exit(1);
     }
+}
+
+int main(int argc, char* argv[]) {
     
-    if (FLAGS_block_size > 512 * 1024 * 1024) {
-        LOG("FATAL: Invalid args.\n");
-        exit(1);   
-    }
+    init(argc, argv);
 
     // Phase 1: divide large input file into small files.
-    char *buf = (char*)malloc((FLAGS_block_size + MAX_URL_LEN) * sizeof(char));
-    
+    url_buf buf(FLAGS_block_size + MAX_URL_LEN);
+
     std::shared_ptr<url_map> map = std::make_shared<url_map>();
 
     url_reader r(FLAGS_url_file); 
@@ -210,12 +210,10 @@ int main(int argc, char* argv[]) {
     }
     
     // Output ans.
-    std::vector< std::shared_ptr<URL> >& topk = map->top_k();
-    for (int i = 0; i < topk.size(); i++) {
-        std::cout << topk[i]->url_ << " " << topk[i]->t_ << std::endl;
+    std::unordered_map<std::string, int32_t>& topk = map->top_k();
+    for (auto it = topk.begin(); it != topk.end(); it++) {
+        std::cout << it->first << " " << it->second << std::endl;
     }
     
-    free((void*)buf);
-
     return 0;
 }
