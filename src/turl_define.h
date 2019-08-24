@@ -1,7 +1,7 @@
 #ifndef _H_DEFINE_
 #define _H_DEFINE_
-#include <stdint.h>
 #include <gflags/gflags.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 namespace turl {
@@ -16,8 +16,7 @@ DECLARE_int64(block_size);
 DECLARE_int64(worker_num);
 DECLARE_int64(hash_shardings);
 
-#define LOG(format, ...) \
-fprintf(stderr, format, ##__VA_ARGS__) 
+#define LOG(format, ...) fprintf(stderr, format, ##__VA_ARGS__)
 
-} //namespace turl
+} // namespace turl
 #endif

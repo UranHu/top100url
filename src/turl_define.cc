@@ -16,4 +16,4 @@ DEFINE_int64(worker_num, 4, "number of counters");
 
 DEFINE_int64(hash_shardings, 4, "number of hash shardings");
 
-} //namespace turl
+} // namespace turl

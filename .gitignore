@@ -1,3 +1,4 @@
 build/
 url_file
 *.log
+temp/
