@@ -56,12 +56,12 @@ int url_reader::read_file() {
   }
   std::string &file = read_list.front();
   init(file);
-  LOG("%s\n", file.c_str());
+  LOG("INFO: read %s.\n", file.c_str());
   read_list.pop_front();
   if (file_size_ == 0) {
     if (read_list.empty()) {
-        stop_->store(true, std::memory_order_release);
-        to_workers->notify_all();
+      stop_->store(true, std::memory_order_release);
+      to_workers->notify_all();
     }
     return 1;
   }
@@ -73,15 +73,15 @@ int url_reader::read_file() {
     }
     pos_ += next_read_ + 1;
     LOG("INFO: Current reader pos >> %ld <<\n", pos_);
-    buf_.has_read(next_read_);
+    buf_.has_read(next_read_ - MAX_URL_LEN);
     next_read_ = (FLAGS_block_size < file_size_ - pos_ + 1)
                      ? FLAGS_block_size
                      : file_size_ - pos_ + 1;
     next_read_ += MAX_URL_LEN;
     to_workers->notify_all();
     {
-    std::unique_lock<std::mutex> guard(mu_);
-    from_worker->wait(guard);
+      std::unique_lock<std::mutex> guard(mu_);
+      from_worker->wait(guard);
     }
   }
   if (read_list.empty()) {

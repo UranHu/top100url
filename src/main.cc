@@ -25,17 +25,15 @@ void work_thread(url_worker *worker,
                  std::shared_ptr<std::condition_variable> from_reader,
                  std::shared_ptr<std::condition_variable> to_reader,
                  std::shared_ptr<std::atomic_bool> stop) {
-  bool the_last = (worker->id() == 0);
+  bool the_last = false;
   while (!stop->load(std::memory_order_acquire)) {
     {
-    std::unique_lock<std::mutex> garud(mu);
-    LOG("worker %d %d\n", worker->id(), the_last);
-    if (the_last) {  
-      LOG("worker%d notify reader.\n", worker->id());
-      to_reader->notify_one();
-      the_last = false;
-    }
-    from_reader->wait(garud);
+      std::unique_lock<std::mutex> garud(mu);
+      if (the_last) {
+        to_reader->notify_one();
+        the_last = false;
+      }
+      from_reader->wait(garud);
     }
     if (stop->load(std::memory_order_acquire)) {
       break;
@@ -67,7 +65,7 @@ int main(int argc, char *argv[]) {
 
   std::shared_ptr<std::condition_variable> from_work =
       std::make_shared<std::condition_variable>();
-  
+
   std::shared_ptr<std::atomic_bool> stop = std::make_shared<std::atomic_bool>();
   std::shared_ptr<url_map> map = std::make_shared<url_map>();
 
@@ -104,7 +102,7 @@ int main(int argc, char *argv[]) {
     split_threads.emplace_back(std::move(
         std::thread(work_thread, workers[i], to_works, from_work, stop)));
   }
-  
+
   r.read_file();
 
   for (int i = 0; i < FLAGS_worker_num; i++) {
@@ -139,7 +137,7 @@ int main(int argc, char *argv[]) {
     counter_threads.emplace_back(std::move(
         std::thread(work_thread, workers[i], to_works, from_work, stop)));
   }
-  
+
   while (r.read_file() == 1) {
     map->stat();
   }
@@ -150,7 +148,7 @@ int main(int argc, char *argv[]) {
   }
 
   // Output ans.
-  std::unordered_map<std::string, int32_t> &topk = map->top_k();
+  std::vector<std::pair<std::string, int32_t>> &topk = map->top_k();
   for (auto it = topk.begin(); it != topk.end(); it++) {
     std::cout << it->first << " " << it->second << std::endl;
   }
